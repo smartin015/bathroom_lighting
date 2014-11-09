@@ -13,15 +13,17 @@ int led = 13;
 #define PIR_PIN 10
 #define LED_PIN 9
 #define AC_RF_PIN A2
-#define FLOOR_LED_PIN 2
+#define FLOOR_LED_PIN 5
 
 #define DIST_THRESH 250
-int ctr = -1;
+int RF_ctr = -1; // Counter for 
+int IR_ctr = -1; // Counter for IR distance sensor + mirror lights
 
 boolean light_state = true;
 #define LIGHT_OFF_NTICKS 40
 #define LIGHT_ON_NTICKS 100
-#define RF_CMD_NUM_REPEATS 30
+#define RF_CMD_NUM_REPEATS 5
+#define MIRROR_ON_NTICKS 10
 
 HS1527 encoder(AC_RF_PIN);
 char *address = "\xBE\xA3\x90";
@@ -46,8 +48,11 @@ void cabinet_lights(boolean on) {
  digitalWrite(LED_PIN, on); 
 }
 
+int floor_light_pwm = 0;
 void floor_lights(boolean on) {
- digitalWrite(FLOOR_LED_PIN, on); 
+ if (on) {
+     analogWrite(FLOOR_LED_PIN, floor_light_pwm);
+ }
 }
 
 void overhead_lights(boolean on) {
@@ -65,23 +70,30 @@ void loop() {
   char motion = digitalRead(PIR_PIN);
   int dist = analogRead(DIST_PIN);
   
-  boolean motion_trigger = motion && (ctr == -LIGHT_OFF_NTICKS || ctr > 0);
+  boolean motion_trigger = motion && (RF_ctr == -LIGHT_OFF_NTICKS || RF_ctr > 0);
   boolean distance_trigger = (dist > DIST_THRESH);
   
-  if (distance_trigger) {
+  if (distance_trigger || IR_ctr > 0) {
     cabinet_lights(true); 
+    IR_ctr = MIRROR_ON_NTICKS;
   } else {
     cabinet_lights(false); 
   }
+  if (IR_ctr > 0) {
+    IR_ctr--; 
+  }
   
   if (motion_trigger || distance_trigger) {
-    ctr = LIGHT_ON_NTICKS; 
+    RF_ctr = LIGHT_ON_NTICKS; 
     floor_lights(true);
     overhead_lights(true);
-  } else if (ctr > -LIGHT_OFF_NTICKS) {
-    ctr--; 
-    floor_lights(false);
-    overhead_lights(false);
+  } else if (RF_ctr > -LIGHT_OFF_NTICKS) {
+    RF_ctr--; 
+    
+    if (RF_ctr < 0) {
+      floor_lights(false);
+      overhead_lights(false);
+    }
   }
   
   delay(200);
